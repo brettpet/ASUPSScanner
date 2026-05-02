@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Camp Scanner</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #0f1117;
+    --surface:   #181c27;
+    --surface2:  #1f2436;
+    --border:    rgba(255,255,255,0.08);
+    --border2:   rgba(255,255,255,0.14);
+    --text:      #eef0f6;
+    --muted:     #8891aa;
+    --accent:    #5b8df6;
+    --accent-bg: rgba(91,141,246,0.12);
+    --green:     #3ecf8e;
+    --green-bg:  rgba(62,207,142,0.12);
+    --amber:     #f5a623;
+    --amber-bg:  rgba(245,166,35,0.12);
+    --red:       #f16060;
+    --red-bg:    rgba(241,96,96,0.12);
+    --radius:    14px;
+    --radius-sm: 8px;
+    --mono:      'DM Mono', monospace;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; overflow-x:hidden; }
+
+  /* ── BANNER ── */
+  .banner { padding:10px 16px; font-size:13px; text-align:center; display:none; border-bottom:1px solid; }
+  .banner.warn    { display:block; background:var(--amber-bg); color:var(--amber); border-color:rgba(245,166,35,0.4); }
+  .banner.error   { display:block; background:var(--red-bg);   color:var(--red);   border-color:rgba(241,96,96,0.4); }
+  .banner.loading { display:block; background:var(--accent-bg);color:var(--accent);border-color:rgba(91,141,246,0.3); }
+
+  /* ── TOP BAR ── */
+  .topbar { background:var(--surface); border-bottom:1px solid var(--border); padding:14px 16px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; }
+  .topbar-left { display:flex; align-items:center; gap:10px; }
+  .camp-logo { width:32px; height:32px; border-radius:8px; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:16px; }
+  .camp-title { font-size:15px; font-weight:600; }
+  .camp-sub   { font-size:12px; color:var(--muted); margin-top:1px; }
+  .station-chip { font-family:var(--mono); font-size:12px; background:var(--accent-bg); color:var(--accent); border:1px solid rgba(91,141,246,0.3); border-radius:20px; padding:4px 12px; white-space:nowrap; }
+
+  /* ── CAPACITY BAR ── */
+  .cap-bar { background:var(--surface); border-bottom:1px solid var(--border); padding:10px 16px; display:flex; align-items:center; gap:10px; }
+  .cap-label { font-size:12px; color:var(--muted); flex-shrink:0; }
+  .cap-track { flex:1; height:5px; background:var(--surface2); border-radius:99px; overflow:hidden; }
+  .cap-fill  { height:100%; border-radius:99px; background:var(--green); transition:width 0.4s,background 0.3s; }
+  .cap-count { font-family:var(--mono); font-size:12px; flex-shrink:0; min-width:42px; text-align:right; }
+
+  /* ── MAIN ── */
+  .main { padding:16px; max-width:480px; margin:0 auto; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:12px; overflow:hidden; }
+  .card-hd { padding:12px 16px 0; font-size:11px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); }
+
+  /* ── SCAN ── */
+  .scan-wrap { padding:12px; display:flex; gap:8px; }
+  .scan-input { flex:1; background:var(--surface2); border:1px solid var(--border2); border-radius:var(--radius-sm); color:var(--text); font-family:var(--mono); font-size:15px; padding:11px 14px; outline:none; transition:border-color 0.2s; min-width:0; }
+  .scan-input::placeholder { color:var(--muted); font-family:'DM Sans',sans-serif; font-size:14px; }
+  .scan-input:focus { border-color:var(--accent); }
+
+  .cam-btn { background:var(--surface2); border:1px solid var(--border2); border-radius:var(--radius-sm); color:var(--text); font-size:14px; font-weight:500; font-family:'DM Sans',sans-serif; padding:11px 14px; cursor:pointer; white-space:nowrap; display:flex; align-items:center; gap:6px; transition:border-color 0.15s,color 0.15s; flex-shrink:0; }
+  .cam-btn:hover  { border-color:var(--accent); color:var(--accent); }
+  .cam-btn.active { border-color:var(--red); color:var(--red); background:var(--red-bg); }
+
+  .scan-go { background:var(--accent); color:#fff; border:none; border-radius:var(--radius-sm); padding:11px 18px; font-size:14px; font-weight:600; cursor:pointer; white-space:nowrap; transition:opacity 0.15s,transform 0.1s; flex-shrink:0; }
+  .scan-go:active { opacity:0.85; transform:scale(0.97); }
+
+  /* ── CAMERA OVERLAY ── */
+  #cameraOverlay {
+    display:none; position:fixed; inset:0;
+    background:rgba(0,0,0,0.93);
+    z-index:300;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:20px;
+    padding:24px;
+  }
+  #cameraOverlay.open { display:flex; }
+
+  .cam-label { font-size:12px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); }
+
+  .cam-frame {
+    position:relative;
+    width:min(340px, 88vw);
+    height:min(340px, 88vw);
+    border-radius:18px;
+    overflow:hidden;
+    background:#000;
+  }
+  .cam-frame video {
+    width:100%; height:100%;
+    object-fit:cover;
+    display:block;
+  }
+  /* Corner brackets */
+  .cam-corner {
+    position:absolute;
+    width:32px; height:32px;
+    border-color:var(--accent);
+    border-style:solid;
+    border-width:0;
+    z-index:2;
+  }
+  .cam-corner.tl { top:14px; left:14px; border-top-width:3px; border-left-width:3px; border-radius:5px 0 0 0; }
+  .cam-corner.tr { top:14px; right:14px; border-top-width:3px; border-right-width:3px; border-radius:0 5px 0 0; }
+  .cam-corner.bl { bottom:14px; left:14px; border-bottom-width:3px; border-left-width:3px; border-radius:0 0 0 5px; }
+  .cam-corner.br { bottom:14px; right:14px; border-bottom-width:3px; border-right-width:3px; border-radius:0 0 5px 0; }
+  /* Scan line */
+  .cam-scanline {
+    position:absolute;
+    left:18px; right:18px; height:2px;
+    background:linear-gradient(90deg,transparent,var(--accent),transparent);
+    box-shadow:0 0 10px var(--accent);
+    border-radius:2px;
+    animation:scanline 2s ease-in-out infinite;
+    z-index:2;
+  }
+  @keyframes scanline {
+    0%   { top:18px;               opacity:0; }
+    8%   {                          opacity:1; }
+    92%  {                          opacity:1; }
+    100% { top:calc(100% - 20px);  opacity:0; }
+  }
+  /* Flash on decode */
+  .cam-flash {
+    position:absolute; inset:0;
+    background:var(--green);
+    opacity:0;
+    border-radius:18px;
+    pointer-events:none;
+    z-index:3;
+    transition:opacity 0.08s;
+  }
+  .cam-flash.flash { opacity:0.35; }
+
+  .cam-status { font-size:14px; color:var(--muted); text-align:center; min-height:22px; transition:color 0.2s; }
+  .cam-status.found { color:var(--green); font-weight:600; }
+  .cam-status.err   { color:var(--red); }
+
+  .cam-close {
+    background:var(--surface2);
+    border:1px solid var(--border2);
+    border-radius:99px;
+    color:var(--muted);
+    font-size:14px;
+    font-family:'DM Sans',sans-serif;
+    padding:11px 32px;
+    cursor:pointer;
+    transition:color 0.15s;
+  }
+  .cam-close:hover { color:var(--text); }
+
+  /* ── CAMPER CARD ── */
+  .camper-row { display:flex; align-items:center; gap:12px; padding:14px 16px; }
+  .avatar { width:46px; height:46px; border-radius:50%; background:var(--accent-bg); border:1px solid rgba(91,141,246,0.25); display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:600; color:var(--accent); flex-shrink:0; }
+  .camper-name  { font-size:17px; font-weight:600; }
+  .camper-chips { display:flex; gap:6px; flex-wrap:wrap; margin-top:5px; }
+  .chip { font-size:11px; padding:3px 9px; border-radius:20px; background:var(--surface2); color:var(--muted); border:1px solid var(--border); }
+  .chip.branch { background:rgba(62,207,142,0.1); color:var(--green); border-color:rgba(62,207,142,0.3); }
+  .chip.fire   { background:rgba(241,96,96,0.1);  color:var(--red);   border-color:rgba(241,96,96,0.3); }
+
+  /* ── STATION TABS ── */
+  .stn-tabs { display:flex; gap:6px; padding:12px 12px 0; flex-wrap:wrap; }
+  .stn-tab { background:var(--surface2); border:1px solid var(--border2); border-radius:6px; color:var(--muted); font-size:12px; font-family:var(--mono); padding:6px 12px; cursor:pointer; transition:all 0.15s; }
+  .stn-tab:hover { border-color:var(--accent); color:var(--accent); }
+  .stn-tab.active { background:var(--accent-bg); border-color:var(--accent); color:var(--accent); font-weight:600; }
+
+  /* ── ACTIVITY GRID ── */
+  .act-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:12px; }
+  .act-btn { background:var(--surface2); border:1px solid var(--border2); border-radius:var(--radius-sm); color:var(--text); font-size:13px; font-family:'DM Sans',sans-serif; padding:12px 10px 10px; cursor:pointer; text-align:center; transition:border-color 0.15s,background 0.15s,transform 0.1s; }
+  .act-btn:active { transform:scale(0.97); }
+  .act-btn:hover  { background:#252b3d; }
+  .act-btn.selected { background:var(--accent-bg); border-color:var(--accent); color:var(--accent); font-weight:600; }
+  .act-btn.full-act { opacity:0.38; cursor:not-allowed; text-decoration:line-through; }
+  .act-count { display:block; font-size:11px; color:var(--muted); margin-top:3px; }
+  .act-btn.selected .act-count { color:var(--accent); opacity:0.8; }
+  .full-tag { display:inline-block; font-size:9px; background:var(--red-bg); color:var(--red); border-radius:4px; padding:1px 5px; margin-left:4px; vertical-align:middle; text-decoration:none; }
+
+  /* ── SUBMIT ── */
+  .submit-wrap { padding:0 12px 12px; }
+  .submit-btn { width:100%; padding:15px; background:var(--green); color:#0a1f14; border:none; border-radius:var(--radius-sm); font-size:15px; font-weight:700; font-family:'DM Sans',sans-serif; cursor:pointer; transition:opacity 0.2s,transform 0.1s; }
+  .submit-btn:disabled { opacity:0.3; cursor:not-allowed; }
+  .submit-btn:not(:disabled):active { transform:scale(0.98); opacity:0.9; }
+  .submit-btn.loading { opacity:0.6; cursor:not-allowed; }
+
+  .refresh-btn { background:none; border:1px solid var(--border2); border-radius:6px; color:var(--muted); font-size:12px; font-family:'DM Sans',sans-serif; padding:5px 12px; cursor:pointer; margin:0 12px 12px; }
+  .refresh-btn:hover { color:var(--accent); border-color:var(--accent); }
+
+  /* ── TOAST ── */
+  #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%) translateY(80px); background:var(--surface2); border:1px solid var(--border2); border-radius:99px; padding:11px 20px; font-size:14px; font-weight:500; display:flex; align-items:center; gap:8px; box-shadow:0 8px 32px rgba(0,0,0,0.4); transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1); z-index:999; white-space:nowrap; }
+  #toast.show    { transform:translateX(-50%) translateY(0); }
+  #toast.success { border-color:rgba(62,207,142,0.4); color:var(--green); }
+  #toast.error   { border-color:rgba(241,96,96,0.4);  color:var(--red); }
+  .toast-dot { width:8px; height:8px; border-radius:50%; background:currentColor; flex-shrink:0; }
+
+  /* ── LOG ── */
+  .log-list  { padding:0 0 4px; }
+  .log-empty { padding:16px; font-size:13px; color:var(--muted); text-align:center; }
+  .log-row   { display:flex; align-items:center; padding:10px 16px; border-top:1px solid var(--border); gap:10px; animation:fadeSlide 0.25s ease; }
+  @keyframes fadeSlide { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+  .log-dot  { width:6px; height:6px; border-radius:50%; background:var(--green); flex-shrink:0; }
+  .log-name { font-size:13px; font-weight:500; flex:1; }
+  .log-act  { font-size:13px; color:var(--muted); }
+  .log-time { font-size:11px; color:var(--muted); margin-left:6px; white-space:nowrap; }
+
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+
+<script>
+// ══════════════════════════════════════════════════════
+// CONFIGURATION — paste your Apps Script URL here
+// ══════════════════════════════════════════════════════
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzKW6CA6f0wBoFq61XZMeyZBnejcsY1wQO_VhEkM6F_aHG1E3T1JOuZxQfSBLB8Xe3X/exec";
+// ══════════════════════════════════════════════════════
+
+const ALL_STATIONS = ["A1","A2","A3","R1","R2","R3","R4"];
+
+let ACTIVITIES    = {};
+let CAMPERS       = {};
+let dataLoaded    = false;
+let currentStation = localStorage.getItem("campStation") || "A1";
+let currentCamper  = null;
+let selectedAct    = null;
+let sessionCounts  = {};
+let sessionLog     = [];
+
+// Camera state
+let camStream     = null;
+let barcodeReader = null;
+let camActive     = false;
+</script>
+
+<div class="banner loading" id="banner">⏳ Loading from Google Sheets…</div>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="camp-logo">⛺</div>
+    <div>
+      <div class="camp-title">Camp Scanner</div>
+      <div class="camp-sub" id="topDate"></div>
+    </div>
+  </div>
+  <div class="station-chip" id="stationChip">—</div>
+</div>
+
+<div class="cap-bar">
+  <span class="cap-label">Station capacity</span>
+  <div class="cap-track"><div class="cap-fill" id="capFill" style="width:0%"></div></div>
+  <span class="cap-count" id="capCount">— / —</span>
+</div>
+
+<div class="main">
+
+  <div class="card">
+    <div class="card-hd">Scan wristband</div>
+    <div class="scan-wrap">
+      <input class="scan-input" id="scanInput"
+        placeholder="Type code or tap 📷…"
+        autocomplete="off" autocorrect="off" spellcheck="false" autofocus />
+      <button class="cam-btn" id="camBtn" onclick="openCamera()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+          <circle cx="12" cy="13" r="4"/>
+        </svg>
+        Camera
+      </button>
+      <button class="scan-go" onclick="handleScan()">Go</button>
+    </div>
+  </div>
+
+  <div class="card hidden" id="camperCard">
+    <div class="camper-row">
+      <div class="avatar" id="avatarEl">?</div>
+      <div>
+        <div class="camper-name" id="camperNameEl">—</div>
+        <div class="camper-chips" id="camperChipsEl"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card hidden" id="actCard">
+    <div class="card-hd" style="padding-top:14px">Select station & activity</div>
+    <div class="stn-tabs" id="stnTabs"></div>
+    <div class="act-grid" id="actGrid"></div>
+    <button class="refresh-btn" onclick="loadData()">↻ Refresh from sheet</button>
+    <div class="submit-wrap">
+      <button class="submit-btn" id="submitBtn" onclick="submitSignup()" disabled>Sign up camper</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd" style="padding:14px 16px 0">Recent sign-ups</div>
+    <div class="log-list" id="logList">
+      <div class="log-empty">No sign-ups yet.</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Camera overlay -->
+<div id="cameraOverlay">
+  <div class="cam-label">Point at wristband QR code</div>
+  <div class="cam-frame">
+    <video id="camVideo" playsinline muted></video>
+    <div class="cam-corner tl"></div>
+    <div class="cam-corner tr"></div>
+    <div class="cam-corner bl"></div>
+    <div class="cam-corner br"></div>
+    <div class="cam-scanline"></div>
+    <div class="cam-flash" id="camFlash"></div>
+  </div>
+  <div class="cam-status" id="camStatus">Searching…</div>
+  <button class="cam-close" onclick="closeCamera()">Cancel</button>
+</div>
+
+<div id="toast"><div class="toast-dot"></div><span id="toastMsg"></span></div>
+
+<script>
+// ── INIT ─────────────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("topDate").textContent =
+    new Date().toLocaleDateString("en-US", {weekday:"short", month:"short", day:"numeric"});
+  document.getElementById("scanInput").addEventListener("keydown", e => {
+    if (e.key === "Enter") handleScan();
+  });
+  loadData();
+});
+
+// ── LOAD DATA ────────────────────────────────────────────────
+async function loadData() {
+  setBanner("loading", "⏳ Loading activities and roster from Google Sheets…");
+
+  if (APPS_SCRIPT_URL === "PASTE_YOUR_APPS_SCRIPT_URL_HERE") {
+    setBanner("warn", "⚠️ Apps Script URL not set — paste your URL into APPS_SCRIPT_URL at the top of the file.");
+    loadFallbackData();
+    return;
+  }
+
+  try {
+    const res  = await fetch(`${APPS_SCRIPT_URL}?action=getData`);
+    const json = await res.json();
+
+    ACTIVITIES = {};
+    (json.activities || []).forEach(row => {
+      const stn = row.station;
+      if (!ACTIVITIES[stn]) ACTIVITIES[stn] = [];
+      ACTIVITIES[stn].push({name:row.name, capacity:Number(row.capacity), signups:Number(row.signups||0)});
+    });
+
+    CAMPERS = {};
+    (json.campers || []).forEach(row => {
+      CAMPERS[row.code] = {
+        name:    (row.firstName + " " + row.lastName).trim(),
+        cabin:   row.cabin,
+        village: row.village,
+        notes:   row.notes || ""
+      };
+    });
+
+    dataLoaded = true;
+    setBanner(null);
+    buildStationTabs();
+    applyStation(currentStation);
+    showToast("Sheet data loaded", "success");
+
+  } catch (err) {
+    setBanner("error", "❌ Could not reach Google Sheets — check your Apps Script URL.");
+  }
+}
+
+function loadFallbackData() {
+  ACTIVITIES = {
+    "A1":[{name:"Archery Basics",capacity:15,signups:4},{name:"Advanced Archery",capacity:12,signups:2}],
+    "A2":[{name:"Kayaking",capacity:18,signups:9},{name:"Swimming",capacity:20,signups:6}],
+    "A3":[{name:"Rock Climbing",capacity:14,signups:0},{name:"Ropes Course",capacity:16,signups:3}],
+    "R1":[{name:"Soccer",capacity:25,signups:12},{name:"Volleyball",capacity:20,signups:8}],
+    "R2":[{name:"Arts & Crafts",capacity:20,signups:5},{name:"Tie-Dye",capacity:18,signups:7}],
+    "R3":[{name:"Drama",capacity:20,signups:3},{name:"Music",capacity:16,signups:11}],
+    "R4":[{name:"Nature Hike",capacity:20,signups:2},{name:"Fishing",capacity:15,signups:6}],
+  };
+  CAMPERS = {
+    "CAMP001":{name:"Emma Torres",   cabin:"Pinecrest",village:"Branch",notes:""},
+    "CAMP002":{name:"Jake Williams", cabin:"Ridgeline", village:"Branch",notes:""},
+    "CAMP003":{name:"Sophia Johnson",cabin:"Summit",    village:"Fire",  notes:""},
+  };
+  dataLoaded = true;
+  buildStationTabs();
+  applyStation(currentStation);
+}
+
+// ── STATION ───────────────────────────────────────────────────
+function buildStationTabs() {
+  const tabs = document.getElementById("stnTabs");
+  tabs.innerHTML = "";
+  ALL_STATIONS.forEach(stn => {
+    const btn = document.createElement("button");
+    btn.className = "stn-tab" + (stn === currentStation ? " active" : "");
+    btn.textContent = stn;
+    btn.onclick = () => {
+      currentStation = stn;
+      localStorage.setItem("campStation", stn);
+      selectedAct = null;
+      document.querySelectorAll(".stn-tab").forEach(b => b.classList.toggle("active", b.textContent === stn));
+      document.getElementById("stationChip").textContent = stn;
+      updateCapBar();
+      buildActGrid();
+      document.getElementById("submitBtn").disabled = true;
+    };
+    tabs.appendChild(btn);
+  });
+}
+
+function applyStation(stn) {
+  currentStation = stn;
+  document.getElementById("stationChip").textContent = stn;
+  updateCapBar();
+}
+
+// ── CAPACITY BAR ─────────────────────────────────────────────
+function updateCapBar() {
+  const acts = ACTIVITIES[currentStation] || [];
+  const cap  = acts.reduce((s,a) => s + a.capacity, 0);
+  const cur  = acts.reduce((s,a) => s + a.signups + (sessionCounts[currentStation+":"+a.name]||0), 0);
+  const pct  = cap > 0 ? Math.min(100, Math.round(cur/cap*100)) : 0;
+  document.getElementById("capCount").textContent = `${cur} / ${cap||"—"}`;
+  const fill = document.getElementById("capFill");
+  fill.style.width = pct + "%";
+  fill.style.background = pct>=100 ? "var(--red)" : pct>=80 ? "var(--amber)" : "var(--green)";
+}
+
+// ── SCAN (manual) ────────────────────────────────────────────
+function handleScan() {
+  const raw  = document.getElementById("scanInput").value.trim().toUpperCase();
+  const code = raw || "CAMP001";
+  document.getElementById("scanInput").value = "";
+  processCamperCode(code);
+}
+
+function processCamperCode(code) {
+  const camper = CAMPERS[code] || {name:"Unknown · "+code, cabin:"—", village:"—", notes:""};
+  currentCamper = {code, ...camper};
+  selectedAct   = null;
+
+  const initials = camper.name.split(" ").map(n=>n[0]).join("").slice(0,2);
+  document.getElementById("avatarEl").textContent     = initials;
+  document.getElementById("camperNameEl").textContent = camper.name;
+
+  const chips = document.getElementById("camperChipsEl");
+  chips.innerHTML = "";
+  const chipData = [
+    {text: camper.cabin,   cls: ""},
+    {text: camper.village, cls: camper.village.toLowerCase()},
+  ];
+  if (camper.notes) chipData.push({text: "📌 " + camper.notes, cls: ""});
+  chipData.forEach(({text, cls}) => {
+    const c = document.createElement("span");
+    c.className = "chip" + (cls ? " "+cls : "");
+    c.textContent = text;
+    chips.appendChild(c);
+  });
+
+  document.getElementById("camperCard").classList.remove("hidden");
+  document.getElementById("actCard").classList.remove("hidden");
+  buildStationTabs();
+  buildActGrid();
+  document.getElementById("submitBtn").disabled = true;
+}
+
+// ── CAMERA SCANNER ────────────────────────────────────────────
+async function openCamera() {
+  const overlay = document.getElementById("cameraOverlay");
+  const status  = document.getElementById("camStatus");
+  const btn     = document.getElementById("camBtn");
+
+  // Check for BarcodeDetector (Chrome/Edge on Android, some desktop)
+  // Fallback to manual decode library if unavailable
+  const hasNativeDetector = "BarcodeDetector" in window;
+
+  status.textContent = "Starting camera…";
+  status.className   = "cam-status";
+  overlay.classList.add("open");
+  btn.classList.add("active");
+  camActive = true;
+
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: "environment",   // rear camera on phones
+        width:  { ideal: 1280 },
+        height: { ideal: 720 },
+      }
+    });
+    const video = document.getElementById("camVideo");
+    video.srcObject = camStream;
+    await video.play();
+
+    status.textContent = "Point at a wristband QR code";
+
+    if (hasNativeDetector) {
+      barcodeReader = new BarcodeDetector({ formats: ["qr_code"] });
+      scanLoop(video, barcodeReader);
+    } else {
+      // Fallback: load jsQR library dynamically
+      status.textContent = "Loading QR engine…";
+      await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js");
+      status.textContent = "Point at a wristband QR code";
+      scanLoopjsQR(video);
+    }
+
+  } catch (err) {
+    if (err.name === "NotAllowedError") {
+      status.textContent = "Camera permission denied — please allow camera access and try again";
+    } else {
+      status.textContent = "Camera unavailable: " + err.message;
+    }
+    status.className = "cam-status err";
+  }
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+// ── Native BarcodeDetector loop (Chrome Android, newer browsers) ──
+async function scanLoop(video, detector) {
+  if (!camActive) return;
+  try {
+    const codes = await detector.detect(video);
+    if (codes.length > 0) {
+      const raw = codes[0].rawValue.trim().toUpperCase();
+      onCodeDetected(raw);
+      return;
+    }
+  } catch (_) {}
+  requestAnimationFrame(() => scanLoop(video, detector));
+}
+
+// ── jsQR fallback loop (Safari iOS, Firefox) ──────────────────
+function scanLoopjsQR(video) {
+  if (!camActive) return;
+
+  const canvas = document.createElement("canvas");
+  const ctx    = canvas.getContext("2d", {willReadFrequently: true});
+
+  function tick() {
+    if (!camActive) return;
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      canvas.width  = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: "dontInvert"
+      });
+      if (code) {
+        onCodeDetected(code.data.trim().toUpperCase());
+        return;
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+function onCodeDetected(code) {
+  // Flash the frame green
+  const flash = document.getElementById("camFlash");
+  flash.classList.add("flash");
+  setTimeout(() => flash.classList.remove("flash"), 200);
+
+  const status = document.getElementById("camStatus");
+  const camper = CAMPERS[code];
+  if (camper) {
+    status.textContent = `✓ Found: ${camper.name}`;
+  } else {
+    status.textContent = `✓ Code: ${code}`;
+  }
+  status.className = "cam-status found";
+
+  // Small delay so staff can see the confirmation, then close + process
+  setTimeout(() => {
+    closeCamera();
+    processCamperCode(code);
+  }, 700);
+}
+
+function closeCamera() {
+  camActive = false;
+  if (camStream) {
+    camStream.getTracks().forEach(t => t.stop());
+    camStream = null;
+  }
+  document.getElementById("camVideo").srcObject = null;
+  document.getElementById("cameraOverlay").classList.remove("open");
+  document.getElementById("camBtn").classList.remove("active");
+  document.getElementById("camStatus").textContent = "Searching…";
+  document.getElementById("camStatus").className = "cam-status";
+}
+
+// ── ACTIVITY GRID ─────────────────────────────────────────────
+function buildActGrid() {
+  const acts = ACTIVITIES[currentStation] || [];
+  const grid = document.getElementById("actGrid");
+  grid.innerHTML = "";
+
+  if (acts.length === 0) {
+    const msg = document.createElement("div");
+    msg.style.cssText = "grid-column:1/-1;padding:16px;text-align:center;color:var(--muted);font-size:13px";
+    msg.textContent = "No activities for station " + currentStation;
+    grid.appendChild(msg);
+    return;
+  }
+
+  acts.forEach(act => {
+    const localBoost = sessionCounts[currentStation+":"+act.name] || 0;
+    const total      = act.signups + localBoost;
+    const full       = total >= act.capacity;
+    const spotsLeft  = act.capacity - total;
+
+    const btn = document.createElement("button");
+    btn.className = "act-btn" + (full ? " full-act" : "");
+    btn.innerHTML = act.name
+      + (full ? `<span class="full-tag">FULL</span>` : "")
+      + `<span class="act-count">${total}/${act.capacity}${full ? "" : " · "+spotsLeft+" left"}</span>`;
+    if (!full) btn.onclick = () => {
+      selectedAct = act.name;
+      document.querySelectorAll(".act-btn").forEach(b => b.classList.remove("selected"));
+      btn.classList.add("selected");
+      document.getElementById("submitBtn").disabled = false;
+    };
+    grid.appendChild(btn);
+  });
+}
+
+// ── SUBMIT ────────────────────────────────────────────────────
+async function submitSignup() {
+  if (!selectedAct || !currentCamper) return;
+
+  const btn = document.getElementById("submitBtn");
+  btn.classList.add("loading");
+  btn.disabled = true;
+  btn.textContent = "Saving…";
+
+  const payload = {
+    action:   "submit",
+    qrCode:   currentCamper.code,
+    name:     currentCamper.name,
+    cabin:    currentCamper.cabin,
+    village:  currentCamper.village,
+    station:  currentStation,
+    activity: selectedAct,
+  };
+
+  let ok = false;
+  if (APPS_SCRIPT_URL !== "PASTE_YOUR_APPS_SCRIPT_URL_HERE") {
+    try {
+      await fetch(APPS_SCRIPT_URL, {
+        method: "POST", mode: "no-cors",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(payload),
+      });
+      ok = true;
+    } catch (err) {
+      showToast("Network error", "error");
+    }
+  } else {
+    ok = true;
+  }
+
+  const key = currentStation + ":" + selectedAct;
+  sessionCounts[key] = (sessionCounts[key] || 0) + 1;
+  updateCapBar();
+  addToLog(currentCamper.name, currentStation, selectedAct);
+  if (ok) showToast(`${currentCamper.name.split(" ")[0]} → ${selectedAct}`, "success");
+
+  currentCamper = null;
+  selectedAct   = null;
+  document.getElementById("camperCard").classList.add("hidden");
+  document.getElementById("actCard").classList.add("hidden");
+  btn.textContent = "Sign up camper";
+  btn.classList.remove("loading");
+  btn.disabled = true;
+  buildActGrid();
+  document.getElementById("scanInput").focus();
+}
+
+// ── LOG ───────────────────────────────────────────────────────
+function addToLog(name, stn, act) {
+  const time = new Date().toLocaleTimeString("en-US", {hour:"numeric", minute:"2-digit"});
+  const list  = document.getElementById("logList");
+  const empty = list.querySelector(".log-empty");
+  if (empty) empty.remove();
+  const row = document.createElement("div");
+  row.className = "log-row";
+  row.innerHTML = `<div class="log-dot"></div>
+    <div class="log-name">${name}</div>
+    <div class="log-act">${stn} · ${act}</div>
+    <div class="log-time">${time}</div>`;
+  list.insertBefore(row, list.firstChild);
+  if (list.children.length > 12) list.removeChild(list.lastChild);
+}
+
+// ── HELPERS ───────────────────────────────────────────────────
+function setBanner(type, msg) {
+  const b = document.getElementById("banner");
+  b.className = type ? `banner ${type}` : "banner";
+  b.textContent = msg || "";
+}
+let toastTimer = null;
+function showToast(msg, type="success") {
+  const t = document.getElementById("toast");
+  document.getElementById("toastMsg").textContent = msg;
+  t.className = `show ${type}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = ""; }, 2600);
+}
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script>
+  window.onload = function() {
+    if (typeof jsQR === 'undefined') {
+      console.error("❌ jsQR failed to load! Check your internet or script tag.");
+    } else {
+      console.log("✅ jsQR is loaded and ready to scan.");
+    }
+  };
+</script>
+</body>
+</html>
