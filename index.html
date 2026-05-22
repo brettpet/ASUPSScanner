@@ -219,12 +219,24 @@
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzKW6CA6f0wBoFq61XZMeyZBnejcsY1wQO_VhEkM6F_aHG1E3T1JOuZxQfSBLB8Xe3X/exec";
 // ══════════════════════════════════════════════════════
 
-const ALL_STATIONS = ["M A1","M A2", "M R1", "M R2","T A1","T A2", "T R1", "T R2"];
+// const ALL_STATIONS = ["M A1","M A2", "M R1", "M R2","T A1","T A2", "T R1", "T R2"];
+
+const ALL_STATIONS = [
+  "M A1","M A2","M R1","M R2",
+  "T A1","T A2","T R1","T R2"
+];
+
+let currentStation = localStorage.getItem("campStation") || "M A1";
+
+if (!ALL_STATIONS.includes(currentStation)) {
+  currentStation = "M A1";
+  localStorage.setItem("campStation", currentStation);
+}
 
 let ACTIVITIES    = {};
 let CAMPERS       = {};
 let dataLoaded    = false;
-let currentStation = localStorage.getItem("campStation") || "A1";
+// let currentStation = localStorage.getItem("campStation") || "A1";
 let currentCamper  = null;
 let selectedAct    = null;
 let sessionCounts  = {};
