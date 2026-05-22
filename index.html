@@ -490,51 +490,65 @@ async function openCamera() {
   const status  = document.getElementById("camStatus");
   const btn     = document.getElementById("camBtn");
 
-  // Check for BarcodeDetector (Chrome/Edge on Android, some desktop)
-  // Fallback to manual decode library if unavailable
-  const hasNativeDetector = "BarcodeDetector" in window;
-
   status.textContent = "Starting camera…";
   status.className   = "cam-status";
+
   overlay.classList.add("open");
   btn.classList.add("active");
   camActive = true;
 
   try {
+    // iPhone Safari works better with simpler constraints
     camStream = await navigator.mediaDevices.getUserMedia({
       video: {
-        facingMode: "environment",   // rear camera on phones
-        width:  { ideal: 1280 },
-        height: { ideal: 720 },
-      }
+        facingMode: { ideal: "environment" },
+        width:  { ideal: 640 },
+        height: { ideal: 480 }
+      },
+      audio: false
     });
+
     const video = document.getElementById("camVideo");
+
+    video.setAttribute("playsinline", true);
+    video.setAttribute("autoplay", true);
+    video.setAttribute("muted", true);
+
     video.srcObject = camStream;
+
     await video.play();
 
-    status.textContent = "Point at a wristband QR code";
+    status.textContent = "Point at a QR code";
 
-    if (hasNativeDetector) {
-      barcodeReader = new BarcodeDetector({ formats: ["qr_code"] });
+    // ALWAYS use jsQR on iPhone
+    const isiPhone =
+      /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+    if (isiPhone) {
+      scanLoopjsQR(video);
+      return;
+    }
+
+    // Android/Desktop can use BarcodeDetector
+    if ("BarcodeDetector" in window) {
+      barcodeReader = new BarcodeDetector({
+        formats: ["qr_code"]
+      });
+
       scanLoop(video, barcodeReader);
     } else {
-      // Fallback: load jsQR library dynamically
-      status.textContent = "Loading QR engine…";
-      await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js");
-      status.textContent = "Point at a wristband QR code";
       scanLoopjsQR(video);
     }
 
   } catch (err) {
-    if (err.name === "NotAllowedError") {
-      status.textContent = "Camera permission denied — please allow camera access and try again";
-    } else {
-      status.textContent = "Camera unavailable: " + err.message;
-    }
+    console.error(err);
+
+    status.textContent =
+      "Camera failed. Check Safari camera permissions.";
+
     status.className = "cam-status err";
   }
 }
-
 function loadScript(src) {
   return new Promise((resolve, reject) => {
     if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
@@ -565,26 +579,49 @@ function scanLoopjsQR(video) {
   if (!camActive) return;
 
   const canvas = document.createElement("canvas");
-  const ctx    = canvas.getContext("2d", {willReadFrequently: true});
+  const ctx = canvas.getContext("2d", {
+    willReadFrequently: true
+  });
 
   function tick() {
     if (!camActive) return;
+
     if (video.readyState === video.HAVE_ENOUGH_DATA) {
-      canvas.width  = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: "dontInvert"
-      });
-      if (code) {
-        onCodeDetected(code.data.trim().toUpperCase());
+
+      // Smaller canvas improves iPhone performance
+      canvas.width = 640;
+      canvas.height = 480;
+
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const imageData = ctx.getImageData(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
+
+      const code = jsQR(
+        imageData.data,
+        imageData.width,
+        imageData.height,
+        {
+          inversionAttempts: "attemptBoth"
+        }
+      );
+
+      if (code && code.data) {
+        onCodeDetected(
+          code.data.trim().toUpperCase()
+        );
         return;
       }
     }
+
     requestAnimationFrame(tick);
   }
-  requestAnimationFrame(tick);
+
+  tick();
 }
 
 function onCodeDetected(code) {
