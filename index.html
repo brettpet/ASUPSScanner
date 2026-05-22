@@ -444,31 +444,65 @@ async function openCamera() {
   camActive    = true;
   scanCooldown = false;
 
-  try {
-    // FIX 5: Modest ideal resolution so older iPhones don't struggle with large frames
-    camStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
-      audio: false
-    });
+  // Try progressively simpler constraints so iOS Safari always finds something it accepts.
+  // Many iPhones reject specific resolution hints with OverconstrainedError even when
+  // camera permission is fully granted. We go from ideal → rear-only → any camera.
+  const constraintOptions = [
+    { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+    { video: { facingMode: { ideal: "environment" } }, audio: false },
+    { video: { facingMode: "environment" }, audio: false },
+    { video: true, audio: false },
+  ];
 
+  let lastErr = null;
+  for (const constraints of constraintOptions) {
+    try {
+      camStream = await navigator.mediaDevices.getUserMedia(constraints);
+      lastErr = null;
+      break; // success — stop trying
+    } catch(e) {
+      lastErr = e;
+      console.warn("getUserMedia failed with", JSON.stringify(constraints), "→", e.name, e.message);
+    }
+  }
+
+  if (lastErr || !camStream) {
+    const e = lastErr;
+    console.error("All camera attempts failed:", e);
+    let msg = "Camera failed.";
+    if (e) {
+      if (e.name === "NotAllowedError" || e.name === "PermissionDeniedError") {
+        msg = "Camera permission denied. Go to Settings → Safari → Camera and allow this site.";
+      } else if (e.name === "NotFoundError" || e.name === "DevicesNotFoundError") {
+        msg = "No camera found on this device.";
+      } else if (e.name === "NotReadableError" || e.name === "TrackStartError") {
+        msg = "Camera is in use by another app. Close other apps and try again.";
+      } else if (e.name === "OverconstrainedError") {
+        msg = "Camera rejected all settings. Try closing other apps and reloading.";
+      } else {
+        msg = `Camera error (${e.name}): ${e.message}`;
+      }
+    }
+    status.textContent = msg;
+    status.className = "cam-status err";
+    camActive = false;
+    btn.classList.remove("active");
+    return;
+  }
+
+  try {
     const video = document.getElementById("camVideo");
     video.srcObject = camStream;
 
-    // FIX 6: play() can throw "AbortError" on iOS if the overlay transition isn't done —
-    // catch it safely; the video still starts playing in practice.
+    // play() can throw AbortError on iOS during overlay transitions — safe to ignore
     try { await video.play(); } catch(e) { console.warn("video.play():", e.message); }
 
     status.textContent = "Point at a QR code";
-
-    // FIX 7: Use jsQR exclusively — works on iOS, Android, Desktop.
-    // We no longer use BarcodeDetector at all because its iOS support is inconsistent.
     startScanLoop(video);
 
   } catch (err) {
-    console.error("Camera error:", err);
-    status.textContent = err.name === "NotAllowedError"
-      ? "Camera permission denied. Go to Settings → Safari → Camera and allow this site."
-      : "Camera failed: " + err.message;
+    console.error("Video setup error:", err);
+    status.textContent = "Video setup failed: " + err.message;
     status.className = "cam-status err";
     camActive = false;
     btn.classList.remove("active");
